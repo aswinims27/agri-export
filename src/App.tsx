@@ -11,6 +11,8 @@ import Services from './pages/Services';
 import Register from './pages/Register';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import TestFirebase from './pages/TestFirebase';
+import TestStorage from './pages/TestStorage';
 
 const pageVariants = {
   initial: {
@@ -85,6 +87,16 @@ function App() {
                   <Route path="/dashboard" element={
                     <AnimatedRoute>
                       <Dashboard />
+                    </AnimatedRoute>
+                  } />
+                  <Route path="/test-firebase" element={
+                    <AnimatedRoute>
+                      <TestFirebase />
+                    </AnimatedRoute>
+                  } />
+                  <Route path="/test-storage" element={
+                    <AnimatedRoute>
+                      <TestStorage />
                     </AnimatedRoute>
                   } />
                 </Routes>

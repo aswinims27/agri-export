@@ -1,19 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
-  User, MapPin, Phone, Mail, Leaf, TrendingUp, 
-  DollarSign, Package, Globe, Award, ArrowUpRight
+  User, MapPin, Phone, Mail, Leaf, TrendingUp, DollarSign, Package, 
+  Globe, Award, ArrowUpRight, AlertTriangle, Calculator, FileText
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { useAuth } from '../context/AuthContext';
-import { 
-  marketInsightsService, 
-  exportOrdersService, 
-  earningsService, 
-  cropPricingService,
-  exportRecommendationsService,
-  initializeSampleData 
-} from '../services/dataService';
+import { marketInsightsService, exportOrdersService, earningsService, cropPricingService, exportRecommendationsService, initializeSampleData } from '../services/dataService';
+import { exportProductsService } from '../services/exportProductsService';
+import { smartExportService } from '../services/smartExportService';
+import StatCard from '../components/StatCard';
+import ChartCard from '../components/ChartCard';
 
 const Dashboard = () => {
   const { user, userData } = useAuth();
@@ -22,16 +19,13 @@ const Dashboard = () => {
   const [recentExports, setRecentExports] = useState([]);
   const [earningsData, setEarningsData] = useState([]);
   const [topCrops, setTopCrops] = useState([]);
-  const [exportableProducts, setExportableProducts] = useState([
-    { id: 1, name: 'Rice', price: 45, unit: '₹/kg', country: 'USA' },
-    { id: 2, name: 'Wheat', price: 30, unit: '₹/kg', country: 'UAE' },
-    { id: 3, name: 'Spices', price: 120, unit: '₹/kg', country: 'Germany' },
-  ]);
-  const [marketingData, setMarketingData] = useState([
-    { country: 'USA', imports: 'Rice, Cotton', stockRating: 'High' },
-    { country: 'UAE', imports: 'Fruits, Vegetables', stockRating: 'Very High' },
-    { country: 'Germany', imports: 'Organic Grains', stockRating: 'Medium' },
-  ]);
+  const [exportableProducts, setExportableProducts] = useState([]);
+  const [countryTrends, setCountryTrends] = useState([]);
+  const [smartInsights, setSmartInsights] = useState({
+    pricingSuggestions: [],
+    riskAlerts: [],
+    currencyRates: null
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -66,18 +60,34 @@ const Dashboard = () => {
         // Fetch current crop prices
         const cropPrices = await cropPricingService.getCurrentCropPrices();
         setTopCrops(cropPrices);
-
-        // Fetch marketing data from Firestore and listen for updates
-        const unsubscribe = db.collection('marketData').onSnapshot((snapshot) => {
-          const newData = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
-          setMarketingData(newData);
-        });
+        
+        // Fetch farmer's exportable products
+        const products = await exportProductsService.getFarmerProducts(user.uid);
+        setExportableProducts(products);
+        
+        // Get smart insights
+        if (products.length > 0) {
+          const firstProduct = products[0];
+          const pricing = await smartExportService.getDynamicPricing(firstProduct.name, 'USA');
+          const alerts = await smartExportService.getExportRiskAlerts('USA', firstProduct.name);
+          const currency = await smartExportService.convertCurrency(100, 'INR', 'USD');
+          
+          setSmartInsights({
+            pricingSuggestions: [pricing],
+            riskAlerts: alerts,
+            currencyRates: currency
+          });
+        }
+        
+        // Sample country trends data
+        setCountryTrends([
+          { country: 'USA', demand: 85, growth: 12 },
+          { country: 'UAE', demand: 92, growth: 18 },
+          { country: 'Germany', demand: 78, growth: 8 },
+          { country: 'Japan', demand: 88, growth: 15 }
+        ]);
 
         setLoading(false);
-        return () => unsubscribe(); // Cleanup listener on unmount
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
         setLoading(false);
@@ -118,107 +128,50 @@ const Dashboard = () => {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-lg rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow duration-300"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">Total Earnings</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">₹2,20,000</p>
-                <p className="text-green-600 text-sm flex items-center mt-1">
-                  <ArrowUpRight className="h-4 w-4 mr-1" />
-                  +12% from last month
-                </p>
-              </div>
-              <div className="bg-green-100 dark:bg-green-900/30 p-3 rounded-lg">
-                <DollarSign className="h-6 w-6 text-green-600 dark:text-green-400" />
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-lg rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow duration-300"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">Active Exports</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">28</p>
-                <p className="text-blue-600 text-sm flex items-center mt-1">
-                  <Package className="h-4 w-4 mr-1" />
-                  5 pending delivery
-                </p>
-              </div>
-              <div className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-lg">
-                <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-lg rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow duration-300"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">Countries Reached</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">12</p>
-                <p className="text-purple-600 text-sm flex items-center mt-1">
-                  <Globe className="h-4 w-4 mr-1" />
-                  3 new this month
-                </p>
-              </div>
-              <div className="bg-purple-100 dark:bg-purple-900/30 p-3 rounded-lg">
-                <Globe className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-lg rounded-xl p-6 shadow-lg hover:shadow-xl transition-shadow duration-300"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">Success Rate</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">94%</p>
-                <p className="text-yellow-600 text-sm flex items-center mt-1">
-                  <Award className="h-4 w-4 mr-1" />
-                  Excellent rating
-                </p>
-              </div>
-              <div className="bg-yellow-100 dark:bg-yellow-900/30 p-3 rounded-lg">
-                <Award className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
-              </div>
-            </div>
-          </motion.div>
+          <StatCard
+            icon={DollarSign}
+            title="Total Earnings"
+            value="₹2,20,000"
+            subtitle={
+              <span className="flex items-center">
+                <ArrowUpRight className="h-4 w-4 mr-1" />
+                +12% from last month
+              </span>
+            }
+            color="green"
+            trend={true}
+          />
+          
+          <StatCard
+            icon={Package}
+            title="Active Exports"
+            value="28"
+            subtitle="5 pending delivery"
+            color="blue"
+          />
+          
+          <StatCard
+            icon={Globe}
+            title="Countries Reached"
+            value="12"
+            subtitle="3 new this month"
+            color="purple"
+          />
+          
+          <StatCard
+            icon={Award}
+            title="Success Rate"
+            value="94%"
+            subtitle="Excellent rating"
+            color="yellow"
+          />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column */}
           <div className="lg:col-span-2 space-y-8">
             {/* Earnings Chart */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-              className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-lg rounded-xl p-6 shadow-lg"
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
-                  Monthly Earnings
-                </h3>
-                <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
-              </div>
+            <ChartCard title="Monthly Earnings vs Previous Year">
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={earningsData}>
@@ -245,18 +198,38 @@ const Dashboard = () => {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-            </motion.div>
+            </ChartCard>
+            
+            {/* Country Demand Trends */}
+            <ChartCard title="Real-time Country Import Trends">
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={countryTrends}>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis dataKey="country" />
+                    <YAxis />
+                    <Tooltip 
+                      formatter={(value, name) => [
+                        name === 'demand' ? `${value}%` : `+${value}%`,
+                        name === 'demand' ? 'Demand Level' : 'Growth Rate'
+                      ]}
+                      labelStyle={{ color: '#374151' }}
+                      contentStyle={{ 
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                      }}
+                    />
+                    <Bar dataKey="demand" fill="#10B981" name="demand" />
+                    <Bar dataKey="growth" fill="#3B82F6" name="growth" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </ChartCard>
 
             {/* Recent Exports */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6 }}
-              className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-lg rounded-xl p-6 shadow-lg"
-            >
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-6">
-                Recent Exports
-              </h3>
+            <ChartCard title="Recent Exports with Status Tracking">
               <div className="space-y-4">
                 {recentExports.map((export_item) => (
                   <div key={export_item.id} className="flex items-center justify-between p-4 bg-gray-50/50 dark:bg-gray-700/50 rounded-lg">
@@ -288,21 +261,13 @@ const Dashboard = () => {
                   </div>
                 ))}
               </div>
-            </motion.div>
+            </ChartCard>
           </div>
 
           {/* Right Column */}
           <div className="space-y-8">
             {/* Profile Card */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-lg rounded-xl p-6 shadow-lg"
-            >
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-                Profile Overview
-              </h3>
+            <ChartCard title="Profile Overview">
               <div className="space-y-4">
                 <div className="flex items-center space-x-3">
                   <User className="h-5 w-5 text-gray-400" />
@@ -341,18 +306,103 @@ const Dashboard = () => {
                   </div>
                 )}
               </div>
-            </motion.div>
+            </ChartCard>
+            
+            {/* Exportable Products */}
+            <ChartCard title="Your Exportable Products">
+              <div className="space-y-3">
+                {exportableProducts.slice(0, 3).map((product) => (
+                  <div key={product.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">
+                        {product.name}
+                      </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-300">
+                        {product.quantity} kg • {product.category}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-gray-900 dark:text-white">
+                        ₹{product.price}/kg
+                      </p>
+                      <p className="text-xs text-green-600 dark:text-green-400">
+                        {smartInsights.currencyRates ? 
+                          `$${(product.price * smartInsights.currencyRates.rate).toFixed(2)}/kg` : 
+                          'USD rate loading...'
+                        }
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ChartCard>
+            
+            {/* Smart Export Insights */}
+            <ChartCard title="Smart Export Insights">
+              <div className="space-y-4">
+                {/* Dynamic Pricing */}
+                {smartInsights.pricingSuggestions.length > 0 && (
+                  <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Calculator className="h-4 w-4 text-green-600" />
+                      <span className="text-sm font-medium text-green-800 dark:text-green-400">
+                        Pricing Suggestion
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                      Suggested price for {smartInsights.pricingSuggestions[0].product}: 
+                      <span className="font-semibold text-green-600 ml-1">
+                        ₹{smartInsights.pricingSuggestions[0].priceRange.suggested}/kg
+                      </span>
+                    </p>
+                  </div>
+                )}
+                
+                {/* Risk Alerts */}
+                {smartInsights.riskAlerts.slice(0, 2).map((alert, index) => (
+                  <div key={index} className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                    <div className="flex items-center space-x-2 mb-1">
+                      <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                      <span className="text-sm font-medium text-yellow-800 dark:text-yellow-400">
+                        {alert.title}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-300">
+                      {alert.message}
+                    </p>
+                  </div>
+                ))}
+                
+                {/* Currency Rates */}
+                {smartInsights.currencyRates && (
+                  <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                    <div className="flex items-center space-x-2 mb-2">
+                      <DollarSign className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm font-medium text-blue-800 dark:text-blue-400">
+                        Currency Rates
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div className="text-center">
+                        <div className="font-semibold">USD</div>
+                        <div>${smartInsights.currencyRates.rate}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-semibold">EUR</div>
+                        <div>€0.011</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-semibold">GBP</div>
+                        <div>£0.0095</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </ChartCard>
 
             {/* Export Recommendations */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.7 }}
-              className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-lg rounded-xl p-6 shadow-lg"
-            >
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-                Export Recommendations
-              </h3>
+            <ChartCard title="AI-Powered Export Recommendations">
               <div className="space-y-4">
                 {exportRecommendations.map((rec, index) => (
                   <div key={index} className="p-4 bg-green-50/50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
@@ -373,18 +423,10 @@ const Dashboard = () => {
                   </div>
                 ))}
               </div>
-            </motion.div>
+            </ChartCard>
 
             {/* Market Insights */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8 }}
-              className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-lg rounded-xl p-6 shadow-lg"
-            >
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-                Top Crops in Demand This Week
-              </h3>
+            <ChartCard title="Top Crops in Demand This Week">
               <div className="space-y-3">
                 {topCrops.map((crop, index) => (
                   <div key={crop.id || index} className="flex items-center justify-between">
@@ -407,7 +449,7 @@ const Dashboard = () => {
                   </div>
                 ))}
               </div>
-            </motion.div>
+            </ChartCard>
           </div>
         </div>
       </div>
